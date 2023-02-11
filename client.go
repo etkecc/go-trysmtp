@@ -2,6 +2,7 @@ package trysmtp
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/smtp"
@@ -41,11 +42,16 @@ func initClient(localname, hostname string) (*smtp.Client, error) {
 		return nil, err
 	}
 
+	var client *smtp.Client
+	cerr := fmt.Errorf("target SMTP server not found")
 	for _, mx := range mxs {
 		for _, addr := range SMTPAddrs {
-			client := trySMTP(localname, strings.TrimSuffix(mx.Host, "."), addr)
+			client, err = trySMTP(localname, strings.TrimSuffix(mx.Host, "."), addr)
+			if err != nil {
+				cerr = errors.Join(err)
+			}
 			if client != nil {
-				return client, nil
+				return client, cerr
 			}
 		}
 	}
@@ -54,29 +60,32 @@ func initClient(localname, hostname string) (*smtp.Client, error) {
 	// we're supposed to try talking directly to the host.
 	if len(mxs) == 0 {
 		for _, addr := range SMTPAddrs {
-			client := trySMTP(localname, hostname, addr)
+			client, err = trySMTP(localname, hostname, addr)
+			if err != nil {
+				cerr = errors.Join(err)
+			}
 			if client != nil {
-				return client, nil
+				return client, cerr
 			}
 		}
 	}
 
-	return nil, fmt.Errorf("target SMTP server not found")
+	return nil, cerr
 }
 
-func trySMTP(localname, mxhost, addr string) *smtp.Client {
+func trySMTP(localname, mxhost, addr string) (*smtp.Client, error) {
 	conn, err := smtp.Dial(mxhost + addr)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	err = conn.Hello(localname)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	if ok, _ := conn.Extension("STARTTLS"); ok {
 		config := &tls.Config{ServerName: mxhost}
 		conn.StartTLS(config) //nolint:errcheck // if it doesn't work - we can't do anything anyway
 	}
 
-	return conn
+	return conn, nil
 }
