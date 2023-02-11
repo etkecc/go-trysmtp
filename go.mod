@@ -1,3 +1,3 @@
 module gitlab.com/etke.cc/go/trysmtp
 
-go 1.20
+go 1.17

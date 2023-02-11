@@ -2,7 +2,6 @@ package trysmtp
 
 import (
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net"
 	"net/smtp"
@@ -36,22 +35,37 @@ func Connect(from, to string) (*smtp.Client, error) {
 	return client, nil
 }
 
+func unwrapErrors(errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+
+	tokens := strings.Repeat("%v; ", len(errs))
+	// make it compatible with < 1.18
+	ierrs := make([]interface{}, len(errs))
+	for _, err := range errs {
+		ierrs = append(ierrs, err)
+	}
+
+	return fmt.Errorf(tokens, ierrs...)
+}
+
 func initClient(localname, hostname string) (*smtp.Client, error) {
 	mxs, err := net.LookupMX(hostname)
 	if err != nil {
 		return nil, err
 	}
 
+	cerrs := []error{}
 	var client *smtp.Client
-	cerr := fmt.Errorf("target SMTP server not found")
 	for _, mx := range mxs {
 		for _, addr := range SMTPAddrs {
 			client, err = trySMTP(localname, strings.TrimSuffix(mx.Host, "."), addr)
 			if err != nil {
-				cerr = errors.Join(err)
+				cerrs = append(cerrs, err)
 			}
 			if client != nil {
-				return client, cerr
+				return client, unwrapErrors(cerrs)
 			}
 		}
 	}
@@ -62,25 +76,26 @@ func initClient(localname, hostname string) (*smtp.Client, error) {
 		for _, addr := range SMTPAddrs {
 			client, err = trySMTP(localname, hostname, addr)
 			if err != nil {
-				cerr = errors.Join(err)
+				cerrs = append(cerrs, err)
 			}
 			if client != nil {
-				return client, cerr
+				return client, unwrapErrors(cerrs)
 			}
 		}
 	}
 
-	return nil, cerr
+	return nil, unwrapErrors(cerrs)
 }
 
 func trySMTP(localname, mxhost, addr string) (*smtp.Client, error) {
-	conn, err := smtp.Dial(mxhost + addr)
+	target := mxhost + addr
+	conn, err := smtp.Dial(target)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", target, err)
 	}
 	err = conn.Hello(localname)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", target, err)
 	}
 	if ok, _ := conn.Extension("STARTTLS"); ok {
 		config := &tls.Config{ServerName: mxhost}
