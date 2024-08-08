@@ -1,3 +1,3 @@
-module gitlab.com/etke.cc/go/trysmtp
+module github.com/etkecc/go-trysmtp
 
 go 1.17
