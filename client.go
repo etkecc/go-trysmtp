@@ -12,8 +12,7 @@ import (
 // SMTPAddrs priority list
 var SMTPAddrs = []string{":25", ":587", ":465"}
 
-// Connect to SMTP server and call MAIL and RCPT commands
-// NOTE: check if client is not nil, because it can return non-fatal errors with initialized client
+// Connect to SMTP server, call MAIL/RCPT; check client != nil, non-fatal errors can accompany an initialized client
 func Connect(from, to string) (*smtp.Client, error) {
 	localname := strings.SplitN(from, "@", 2)[1]
 	hostname := strings.SplitN(to, "@", 2)[1]
@@ -77,8 +76,7 @@ func initClient(localname, hostname string) (*smtp.Client, error) {
 		}
 	}
 
-	// If there are no MX records, according to https://datatracker.ietf.org/doc/html/rfc5321#section-5.1,
-	// we're supposed to try talking directly to the host.
+	// no MX records: try talking directly to the host (RFC 5321 section 5.1)
 	for _, addr := range SMTPAddrs {
 		client, err = trySMTP(localname, hostname, addr)
 		if err != nil {
